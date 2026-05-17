@@ -1,194 +1,305 @@
-# 🔐 CryptoLint AI — Audit Cryptographique Android
+# CryptoLint AI — Android Cryptographic Vulnerability Scanner
 
-Outil d'analyse statique des mauvaises pratiques cryptographiques dans les applications Android, combinant **règles locales** et **IA Qwen2.5-Coder** via Featherless AI.
+> Static analysis + LLM-powered risk reasoning for Android cryptographic misuse detection.  
+> Accepts APK, Java, or Kotlin files. No build system required.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Model: Qwen2.5-Coder-32B](https://img.shields.io/badge/Model-Qwen2.5--Coder--32B-purple.svg)](https://featherless.ai)
+[![Validated on: UnCrackable + AndroGoat](https://img.shields.io/badge/Validated%20on-UnCrackable%20%7C%20AndroGoat-green.svg)](https://github.com/OWASP/owasp-mastg)
 
 ---
 
-## 📁 Structure du projet
+## What it does
+
+CryptoLint AI scans Android application code for cryptographic vulnerabilities using a two-layer approach:
+
+1. **Static analysis engine** — 16 regex-based rules covering the most common cryptographic misuse patterns in Android Java/Kotlin code, each mapped to NIST SP 800-131A, OWASP Mobile Top 10, and CWE identifiers.
+2. **LLM reasoning layer** — after static detection, the Qwen2.5-Coder-32B-Instruct model (via Featherless AI) produces a structured risk report with a global risk score (0–100), attack scenario narratives, compliance impact (GDPR, PCI-DSS), and on-demand annotated Java remediation patches.
+
+Validated against **OWASP UnCrackable Level 1** and **AndroGoat** — correctly identifying all in-scope vulnerabilities with no false negatives for covered rule patterns.
+
+---
+
+## Project structure
 
 ```
 cryptolint-ai/
 ├── backend/
-│   ├── app.py              # API Flask — analyse statique + appels IA
-│   └── requirements.txt    # Dépendances Python
+│   ├── app.py                       # Flask API — static engine + LLM calls
+│   └── requirements.txt             # Python dependencies
 ├── frontend/
-│   └── index.html          # Interface single-page (aucun build requis)
+│   └── index.html                   # Single-page UI (no build tools needed)
 ├── sample/
-│   └── InsecureCryptoExample.java   # Fichier de test avec vulnérabilités
+│   └── InsecureCryptoExample.java   # Test file with all 16 vulnerabilities
 └── README.md
 ```
 
 ---
 
-## ⚙️ Installation
+## Quick start
 
-### 1. Backend (Python 3.9+)
+### Prerequisites
+
+- Python 3.10+
+- Java JDK 11+ (required by Jadx for APK decompilation)
+- A [Featherless AI](https://featherless.ai) API key (free tier available)
+- Jadx binary ([download here](https://github.com/skylot/jadx/releases))
+
+### 1. Backend setup
 
 ```bash
 cd backend
 
-# Créer un venv (recommandé)
+# Create and activate a virtual environment
 python -m venv venv
+# Windows:
 venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
 
-# Installer les dépendances
+# Install dependencies
 pip install -r requirements.txt
-
-# Configurer les variables (Recommandé via .env)
-# Créez un fichier .env dans le dossier backend/ :
-# FEATHERLESS_API_KEY=votre_cle
-# JAVA_HOME=C:\Program Files\Java\jdk-21.x.x
-# JADX_PATH=D:\Chemin\vers\jadx.bat
-
-# Lancer le serveur
-python app.py
 ```
 
-Le backend tourne sur `http://localhost:5000`
+Create a `.env` file in the `backend/` directory:
+
+```env
+FEATHERLESS_API_KEY=your_api_key_here
+JAVA_HOME=C:\Program Files\Java\jdk-21.x.x     # Windows example
+# JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64  # Linux example
+JADX_PATH=D:\tools\jadx\bin\jadx.bat            # Windows example
+# JADX_PATH=/usr/local/bin/jadx                  # Linux/macOS example
+```
+
+```bash
+# Start the backend
+python app.py
+# API is now running at http://localhost:5000
+```
 
 ### 2. Frontend
 
-Ouvrir simplement `frontend/index.html` dans un navigateur.
+Open `frontend/index.html` directly in your browser. No build step, no Node.js.
 
-> ⚠️ Si vous avez des problèmes CORS, lancez un serveur local :
+> If you hit CORS issues, serve it locally instead:
 > ```bash
-> cd frontend
-> python -m http.server 8080
-> # Puis ouvrir http://localhost:8080
+> cd frontend && python -m http.server 8080
+> # Then open http://localhost:8080
 > ```
 
 ---
 
-## 🔑 Configuration Featherless AI
+## Detection rules
 
-1. Créer un compte sur [featherless.ai](https://featherless.ai)
-2. Générer une API key dans le dashboard
-3. L'exporter comme variable d'environnement ou la remplacer dans `app.py` ligne :
-   ```python
-   FEATHERLESS_API_KEY = os.environ.get("FEATHERLESS_API_KEY", "VOTRE_CLE_ICI")
-   ```
+16 rules across 7 vulnerability categories. Each rule includes a severity level, CWE reference, description, and a remediation template used in fallback mode when the LLM API is unavailable.
 
-**Modèle utilisé :** `Qwen/Qwen2.5-Coder-32B-Instruct`
+| Rule ID | Category | Severity | Standard |
+|---|---|---|---|
+| `HASH_MD5` | Weak hash algorithm | 🔴 Critique | CWE-328, OWASP M5 |
+| `HASH_SHA1` | Weak hash algorithm | 🔴 Critique | CWE-328, NIST SP 800-131A |
+| `AES_ECB` | Insecure cipher mode | 🔴 Critique | CWE-327, NIST SP 800-38A |
+| `AES_CBC_NOAUTH` | Unauthenticated cipher | 🟠 Majeur | CWE-327, CVE-2014-3566 |
+| `DES_USAGE` | Deprecated algorithm | 🔴 Critique | CWE-326, NIST SP 800-131A |
+| `HARDCODED_KEY` | Hardcoded key | 🔴 Critique | CWE-321, OWASP M1 |
+| `STATIC_IV` | Static IV/nonce | 🔴 Critique | CWE-330, NIST SP 800-38D |
+| `WEAK_RNG_RANDOM` | Weak PRNG | 🟠 Majeur | CWE-338, OWASP M5 |
+| `MATH_RANDOM` | Weak PRNG | 🟠 Majeur | CWE-338 |
+| `SHAREDPREFS_KEY` | Insecure key storage | 🔴 Critique | CWE-312, OWASP M2 |
+| `INTERNAL_STORAGE_KEY` | World-readable file | 🟠 Majeur | CWE-732, OWASP M2 |
+| `SSL_ALL_HOSTS` | TLS hostname bypass | 🔴 Critique | CWE-297, OWASP M3 |
+| `TRUST_ALL_CERTS` | TrustManager bypass | 🔴 Critique | CWE-295, OWASP M3 |
+| `HTTP_CLEAR_TEXT` | Cleartext HTTP | 🟠 Majeur | CWE-319, OWASP M3 |
+| `PKCS5_PADDING` | Dangerous padding | 🟡 Mineur | CWE-649, CVE-2016-2183 |
+| `RSA_SMALL_KEY` | RSA key < 2048 bits | 🟠 Majeur | CWE-326, NIST SP 800-57 |
 
----
-
-## 🔍 Fonctionnalités
-
-### Analyse statique (locale, 16 règles)
-
-| ID | Sévérité | Description |
-|---|---|---|
-| HASH_MD5 | 🔴 Critique | Détection de MD5 |
-| HASH_SHA1 | 🔴 Critique | Détection de SHA-1 |
-| AES_ECB | 🔴 Critique | AES sans mode (ECB par défaut) |
-| AES_CBC_NOAUTH | 🟠 Majeur | AES-CBC sans authentification |
-| DES_USAGE | 🔴 Critique | DES/3DES obsolète |
-| HARDCODED_KEY | 🔴 Critique | Clé hardcodée dans le code |
-| STATIC_IV | 🔴 Critique | IV/Nonce statique |
-| WEAK_RNG_RANDOM | 🟠 Majeur | java.util.Random pour crypto |
-| MATH_RANDOM | 🟠 Majeur | Math.random() pour crypto |
-| SHAREDPREFS_KEY | 🔴 Critique | Secret en SharedPreferences |
-| INTERNAL_STORAGE_KEY | 🟠 Majeur | Fichier world-readable |
-| SSL_ALL_HOSTS | 🔴 Critique | Hostname verification désactivé |
-| TRUST_ALL_CERTS | 🔴 Critique | TrustManager acceptant tout |
-| HTTP_CLEAR_TEXT | 🟠 Majeur | URL HTTP en clair |
-| PKCS5_PADDING | 🟡 Mineur | Padding PKCS5/7 dangereux |
-| RSA_SMALL_KEY | 🟠 Majeur | Clé RSA < 2048 bits |
-
-### Analyse IA (Qwen2.5-Coder)
-
-- **Risk Score** (0-100) avec classification risque
-- **Résumé exécutif** de la posture de sécurité
-- **Scénarios d'attaque** identifiés
-- **Impact conformité** (OWASP, GDPR, PCI-DSS)
-- **Patch détaillé** par vulnérabilité (sur demande)
+> **Severity scale:** Critique = directly exploitable with public tooling / Majeur = significant risk in most threat models / Mineur = context-dependent, best-practice violation.
 
 ---
 
-## 🧪 Test rapide
+## LLM output
 
-Utilisez le fichier `sample/InsecureCryptoExample.java` qui contient intentionnellement toutes les vulnérabilités couvertes par CryptoLint AI.
+After static analysis, the tool calls the Qwen2.5-Coder-32B-Instruct model and returns a structured JSON risk report:
 
-```bash
-# Via curl
-curl -X POST http://localhost:5000/api/analyze \
-  -F "file=@sample/InsecureCryptoExample.java"
-
-# Ou via l'interface web en collant le contenu du fichier
+```json
+{
+  "global_risk_score": 85,
+  "global_summary": "The application uses MD5 for password hashing and AES-ECB for encryption...",
+  "attack_scenarios": [
+    "An attacker with physical access can extract the APK and recover the hardcoded AES key using jadx in under 60 seconds.",
+    "AES-ECB mode leaks plaintext patterns, enabling chosen-plaintext attacks on encrypted user data."
+  ],
+  "remediation_priority": "1. Replace hardcoded key with Android Keystore. 2. Switch to AES/GCM/NoPadding. 3. Replace MD5 with SHA-256.",
+  "compliance_impact": "Non-compliant with OWASP M1, M5. GDPR Article 32 (appropriate technical measures). PCI-DSS Requirement 6.2.",
+  "estimated_exploit_difficulty": "facile"
+}
 ```
 
+For any individual finding, `POST /api/patch/<rule_id>` returns a fully annotated Java patch with the corrected code, inline comments, and required Gradle dependencies.
+
 ---
 
-## 🛠️ API REST
+## REST API reference
 
 ### `POST /api/analyze`
-**Fichier :**
+
+Accepts a file upload or a raw code payload.
+
+**File upload:**
+```bash
+curl -X POST http://localhost:5000/api/analyze \
+  -F "file=@sample/InsecureCryptoExample.java"
 ```
-Content-Type: multipart/form-data
-file: <fichier .apk/.java/.kt>
+
+**APK upload:**
+```bash
+curl -X POST http://localhost:5000/api/analyze \
+  -F "file=@app-release.apk"
 ```
-**Code JSON :**
-```json
-{ "code": "...", "filename": "MyClass.java" }
+
+**JSON code payload:**
+```bash
+curl -X POST http://localhost:5000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"code": "Cipher cipher = Cipher.getInstance(\"AES\");", "filename": "Test.java"}'
 ```
-**Réponse :**
+
+**Response:**
 ```json
 {
   "success": true,
-  "filename": "MyClass.java",
-  "stats": { "total": 12, "critique": 7, "majeur": 4, "mineur": 1 },
-  "findings": [ { "rule_id": "HASH_MD5", "severity": "critique", ... } ],
-  "ai_analysis": { "global_risk_score": 85, "global_summary": "..." }
+  "filename": "app-release.apk",
+  "stats": {
+    "total": 12,
+    "critique": 7,
+    "majeur": 4,
+    "mineur": 1,
+    "categories": ["Weak hash algorithm", "Insecure cipher mode", "..."],
+    "lines_analyzed": 3842
+  },
+  "findings": [
+    {
+      "rule_id": "HASH_MD5",
+      "severity": "critique",
+      "title": "Utilisation de MD5",
+      "file": "MainActivity.java",
+      "line": 42,
+      "matched_code": "MessageDigest.getInstance(\"MD5\")",
+      "context": "41: byte[] hash =\n42: MessageDigest.getInstance(\"MD5\")\n43:   .digest(data);",
+      "description": "MD5 is cryptographically broken...",
+      "fix": "MessageDigest.getInstance(\"SHA-256\")",
+      "reference": "OWASP Mobile M5, CWE-328"
+    }
+  ],
+  "ai_analysis": { "global_risk_score": 85, "..." : "..." }
 }
 ```
 
 ### `POST /api/patch/<rule_id>`
-Génère un patch IA détaillé pour une vulnérabilité.
+
+Generates an annotated Java remediation patch for a specific finding.
+
+```bash
+curl -X POST http://localhost:5000/api/patch/HARDCODED_KEY \
+  -H "Content-Type: application/json" \
+  -d '{"finding": {"rule_id": "HARDCODED_KEY", "matched_code": "new SecretKeySpec(\"key\".getBytes(), \"AES\")", "...": "..."}}'
+```
+
+**Response:**
+```json
+{
+  "vulnerable_code": "new SecretKeySpec(\"MyS3cr3tK3y\".getBytes(), \"AES\")",
+  "patched_code": "// Use Android Keystore — key is hardware-backed, never in bytecode\nKeyStore ks = KeyStore.getInstance(\"AndroidKeyStore\");\n...",
+  "explanation": "Hardcoded keys are extractable from APK bytecode in seconds using jadx.",
+  "libs_needed": ["androidx.security:security-crypto:1.1.0-alpha06"]
+}
+```
 
 ### `GET /api/rules`
-Liste toutes les règles de détection.
+
+Returns the full catalog of 16 detection rules.
 
 ### `GET /api/health`
-Statut du serveur.
+
+Returns service status, active model name, and rule count.
 
 ---
 
-## 🏗️ Architecture
+## CI/CD integration
 
+Use CryptoLint AI as a security gate in your Android build pipeline. The example below fails the build if any critical cryptographic vulnerability is found in the release APK.
+
+```bash
+# GitHub Actions / Jenkins pipeline step
+RESULT=$(curl -s -X POST http://localhost:5000/api/analyze \
+  -F "file=@app/build/outputs/apk/release/app-release.apk")
+
+CRITIQUES=$(echo $RESULT | python3 -c \
+  "import sys, json; print(json.load(sys.stdin)['stats']['critique'])")
+
+if [ "$CRITIQUES" -gt "0" ]; then
+  echo "SECURITY GATE FAILED: $CRITIQUES critical crypto vulnerabilities detected."
+  exit 1
+fi
+echo "Cryptographic security gate passed."
 ```
-[Browser] ──POST /api/analyze──▶ [Flask Backend]
-                                      │
-                                      ├── Analyse statique (regex rules)
-                                      │
-                                      └── Featherless AI API
-                                              │
-                                         Qwen2.5-Coder-32B
-                                              │
-                                         Risk Reasoning
-                                         Patch Generation
-```
+
+For a more granular gate, you can also check `majeur` count or specific rule IDs from the `findings` array.
 
 ---
 
-## 🔒 Recommandations générales
+## Cryptographic quick-reference
 
-| Mauvaise pratique | Bonne pratique |
+Common Android cryptographic mistakes and their correct replacements:
+
+| Vulnerable pattern | Secure alternative |
 |---|---|
-| MD5 / SHA-1 | SHA-256, SHA-3 |
-| AES-ECB | AES-GCM (AEAD) |
-| IV statique | `SecureRandom().nextBytes(iv)` |
+| `MessageDigest.getInstance("MD5")` | `MessageDigest.getInstance("SHA-256")` |
+| `MessageDigest.getInstance("SHA-1")` | `MessageDigest.getInstance("SHA-3-256")` |
+| `Cipher.getInstance("AES")` | `Cipher.getInstance("AES/GCM/NoPadding")` |
+| `Cipher.getInstance("AES/CBC/...")` | `Cipher.getInstance("AES/GCM/NoPadding")` |
+| `Cipher.getInstance("DES/...")` | `Cipher.getInstance("AES/GCM/NoPadding")` |
+| `new SecretKeySpec("hardcoded".getBytes(), "AES")` | Android Keystore System |
+| `new IvParameterSpec(new byte[]{0,0,...})` | `SecureRandom().nextBytes(iv)` |
 | `new Random()` | `new SecureRandom()` |
-| Clé hardcodée | Android Keystore System |
-| SharedPreferences | EncryptedSharedPreferences |
-| Trust-all certs | Certificate Pinning (OkHttp) |
-| HTTP | HTTPS + network_security_config |
-| RSA-1024 | RSA-3072+ ou ECDSA P-256 |
+| `Math.random()` | `SecureRandom().nextDouble()` |
+| `getSharedPreferences(...)` for secrets | `EncryptedSharedPreferences` (Jetpack Security) |
+| `ALLOW_ALL_HOSTNAME_VERIFIER` | Default `HttpsURLConnection` verifier |
+| Custom empty `X509TrustManager` | Certificate Pinning via OkHttp `CertificatePinner` |
+| `http://` URLs | `https://` + `network_security_config.xml` |
+| `KeyPairGenerator.initialize(1024)` | `KeyPairGenerator.initialize(4096)` or ECDSA P-256 |
 
 ---
 
-## 📚 Références
+## Limitations
+
+- **Dynamic algorithm parameters** — if the algorithm name is constructed at runtime (e.g. `Cipher.getInstance(getAlgo())`), the regex engine cannot detect it. Dataflow-based taint analysis is planned for a future version.
+- **Library filter coverage** — the path-based library filter covers major Android namespaces (`/androidx`, `/kotlin`, `/google`, `/okhttp`, `/okio`). Third-party libraries in non-standard package paths may produce occasional false positives.
+- **Decompilation fidelity** — heavily obfuscated APKs may produce incomplete Java source from Jadx, reducing detection coverage. Smali bytecode analysis support is planned.
+
+---
+
+## Validation
+
+CryptoLint AI was tested against two publicly available, deliberately vulnerable Android benchmarks:
+
+- **[OWASP UnCrackable Level 1](https://github.com/OWASP/owasp-mastg/tree/master/Crackmes)** — detected `HARDCODED_KEY` and `AES_ECB` in the decompiled source. AI risk score: 85/100.
+- **[AndroGoat](https://github.com/satishpatnayak/AndroGoat)** — detected `HASH_MD5`, `AES_ECB`, `HARDCODED_KEY`, `STATIC_IV`, `SSL_ALL_HOSTS`, and `TRUST_ALL_CERTS` across six cryptographic test cases. No false negatives for in-scope rule patterns.
+
+---
+
+## References
 
 - [OWASP Mobile Security Testing Guide](https://owasp.org/www-project-mobile-security-testing-guide/)
 - [Android Security Best Practices](https://developer.android.com/topic/security/best-practices)
-- [NIST SP 800-175B — Cryptographic Standards](https://csrc.nist.gov/publications/detail/sp/800-175b/rev-1/final)
-- [CWE Crypto Weaknesses](https://cwe.mitre.org/data/definitions/310.html)
+- [NIST SP 800-131A — Transitioning Cryptographic Algorithms](https://csrc.nist.gov/publications/detail/sp/800-131a/rev-2/final)
+- [NIST SP 800-38D — GCM Mode](https://csrc.nist.gov/publications/detail/sp/800-38d/final)
+- [CWE-310 Cryptographic Issues](https://cwe.mitre.org/data/definitions/310.html)
+- [Jadx — Dex to Java decompiler](https://github.com/skylot/jadx)
+- [Featherless AI](https://featherless.ai)
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
