@@ -358,20 +358,24 @@ Réponds UNIQUEMENT avec le JSON valide, sans markdown, sans explication."""
                     },
                     {"role": "user", "content": prompt}
                 ],
-                "max_tokens": 1024,
+                "max_tokens": 8192,
                 "temperature": 0.1,
             },
-            timeout=30,
+            timeout=60,
         )
+
+        if response.status_code != 200:
+            print(f"❌ API Error ({response.status_code}): {response.text}")
+
         data = response.json()
         content = data["choices"][0]["message"]["content"].strip()
         # Nettoyage markdown
-        content = re.sub(r'```(?:json)?', '', content).strip()
+        content = re.sub(r'```(?:json)?\s*|\s*```', '', content).strip()
         parsed = json.loads(content)
         parsed["ai_source"] = "featherless_ai"
         return json.dumps(parsed)
     except Exception as e:
-        print(f"❌ AI Analysis Failed: {str(e)}. Using fallback mock data.")
+        print(f"❌ ERREUR IA DÉTAILLÉE : {str(e)}")
         return json.dumps({
             "global_risk_score": 75,
             "global_summary": f"Analyse IA temporairement indisponible. {len(findings)} vulnérabilités détectées par analyse statique.",
@@ -415,14 +419,18 @@ Réponds UNIQUEMENT en JSON valide."""
                 "max_tokens": 800,
                 "temperature": 0.1,
             },
-            timeout=20,
+            timeout=60,
         )
+
+        if response.status_code != 200:
+            print(f"❌ API Error ({response.status_code}): {response.text}")
+
         data = response.json()
         content = data["choices"][0]["message"]["content"].strip()
-        content = re.sub(r'```(?:json)?', '', content).strip()
+        content = re.sub(r'```(?:json)?\s*|\s*```', '', content).strip()
         return json.loads(content)
     except Exception as e:
-        print(f"❌ AI Patch Generation Failed: {str(e)}. Using static rule fix.")
+        print(f"❌ ERREUR IA DÉTAILLÉE : {str(e)}")
         return {
             "vulnerable_code": finding["matched_code"],
             "patched_code": finding["fix"],
@@ -519,7 +527,8 @@ def analyze():
     findings = analyze_code_static(code_text, filename)
 
     # ── Analyse IA globale ──
-    ai_raw = call_featherless_ai(findings, code_text[:2000])
+    # On passe de 2000 à 15000 caractères pour donner plus de contexte à l'IA
+    ai_raw = call_featherless_ai(findings, code_text[:15000])
     try:
         ai_analysis = json.loads(ai_raw)
     except Exception:
