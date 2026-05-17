@@ -43,7 +43,8 @@ cryptolint-ai/
 
 - Python 3.10+
 - Java JDK 11+ (required by Jadx for APK decompilation)
-- A [Featherless AI](https://featherless.ai) API key (free tier available)
+- A [Featherless AI](https://featherless.ai) API key
+ Alternatively, any OpenAI-compatible API endpoint works — just update `FEATHERLESS_BASE_URL` and `MODEL` in `app.py`.
 - Jadx binary ([download here](https://github.com/skylot/jadx/releases))
 
 ### 1. Backend setup
