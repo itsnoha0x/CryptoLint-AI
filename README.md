@@ -10,6 +10,8 @@
 
 ---
 
+temporarily, demo not available, will be here soon ...
+
 ## What it does
 
 CryptoLint AI scans Android application code for cryptographic vulnerabilities using a two-layer approach:
