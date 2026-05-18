@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/6034f9da-8082-423c-8f08-ddccdf20b547
+
 # CryptoLint AI — Android Cryptographic Vulnerability Scanner
 
 > Static analysis + LLM-powered risk reasoning for Android cryptographic misuse detection.  
@@ -9,8 +13,6 @@
 [![Validated on: UnCrackable + AndroGoat](https://img.shields.io/badge/Validated%20on-UnCrackable%20%7C%20AndroGoat-green.svg)](https://github.com/OWASP/owasp-mastg)
 
 ---
-
-temporarily, demo not available, will be here soon ...
 
 ## What it does
 
